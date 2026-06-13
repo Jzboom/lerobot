@@ -83,6 +83,7 @@ from lerobot.robots import (  # noqa: F401
     reachy2,
     rebot_b601_follower,
     so_follower,
+    ur_rtde,
     unitree_g1 as unitree_g1_robot,
 )
 from lerobot.teleoperators import (  # noqa: F401
@@ -221,6 +222,11 @@ def teleoperate(cfg: TeleoperateConfig):
         else cfg.display_compressed_images
     )
 
+    if getattr(cfg.robot, "gripper_enabled", False) and not getattr(cfg.teleop, "use_gripper", False):
+        raise ValueError(
+            "robot.gripper_enabled=true requires teleop.use_gripper=true so teleop actions "
+            "include the gripper command."
+        )
     teleop = make_teleoperator_from_config(cfg.teleop)
     robot = make_robot_from_config(cfg.robot)
     teleop_action_processor, robot_action_processor, robot_observation_processor = make_default_processors()

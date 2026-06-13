@@ -276,12 +276,18 @@ def build_rollout_context(
     # ``observation_features`` values are either a tuple (camera shape) or the
     # ``float`` type itself used as a sentinel for scalar motor features —
     # see ``dict[str, type | tuple]`` annotation on ``Robot.observation_features``.
-    observation_features_hw = {
-        k: v
-        for k, v in all_obs_features.items()
-        if isinstance(v, tuple) or (v is float and k.endswith(".pos"))
-    }
-    action_features_hw = {k: v for k, v in robot.action_features.items() if k.endswith(".pos")}
+    if robot.name == "ur_rtde":
+        observation_features_hw = {
+            k: v for k, v in all_obs_features.items() if isinstance(v, tuple) or v is float
+        }
+        action_features_hw = dict(robot.action_features)
+    else:
+        observation_features_hw = {
+            k: v
+            for k, v in all_obs_features.items()
+            if isinstance(v, tuple) or (v is float and k.endswith(".pos"))
+        }
+        action_features_hw = {k: v for k, v in robot.action_features.items() if k.endswith(".pos")}
 
     # The action side is always needed: sync inference reads action names from
     # ``dataset_features[ACTION]`` to map policy tensors back to robot actions.

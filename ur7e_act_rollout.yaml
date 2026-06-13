@@ -1,0 +1,38 @@
+strategy:
+  type: base
+
+policy:
+  path: /home/jz/vla/outputs/train/ur7e_act_debug/checkpoints/002000/pretrained_model
+
+robot:
+  type: ur_rtde
+  ip: 192.168.1.10
+  control_hz: 30
+  speed_acceleration: 0.3
+  speed_stop_acceleration: 1.0
+  max_linear_delta_m: 0.006
+  max_angular_delta_rad: 0.05
+  gripper_enabled: true
+  gripper_port: null
+  gripper_baudrate: 115200
+  gripper_slave_id: 1
+  gripper_open_point: 0
+  gripper_close_point: 1
+  gripper_reset_error_on_connect: false
+  gripper_servo_on_connect: true
+  gripper_initialize_on_connect: false
+  gripper_setup_on_connect: false
+  cameras:
+    front:
+      type: opencv
+      index_or_path: /dev/video2
+      width: 640
+      height: 480
+      fps: 30
+
+fps: 30
+duration: 10
+task: Pick up the object
+display_data: false
+play_sounds: false
+return_to_initial_position: false

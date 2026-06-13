@@ -1,0 +1,50 @@
+robot:
+  type: ur_rtde
+  ip: 192.168.1.10
+  control_hz: 30
+  speed_acceleration: 0.3
+  speed_stop_acceleration: 1.0
+  max_linear_delta_m: 0.006
+  max_angular_delta_rad: 0.05
+  gripper_enabled: true
+  gripper_port: null
+  gripper_baudrate: 115200
+  gripper_slave_id: 1
+  gripper_open_point: 0
+  gripper_close_point: 1
+  gripper_reset_error_on_connect: false
+  gripper_servo_on_connect: true
+  gripper_initialize_on_connect: false
+  gripper_setup_on_connect: false
+  cameras:
+    front:
+      type: opencv
+      index_or_path: /dev/video2
+      width: 640
+      height: 480
+      fps: 30
+
+teleop:
+  type: gamepad
+  output_mode: tcp_delta
+  require_deadman: true
+  linear_delta_step_m: 0.002
+  angular_delta_step_rad: 0.01
+  deadzone: 0.12
+  use_gripper: true
+
+dataset:
+  repo_id: local/ur7e_xbox_tcp_delta_gripper
+  root: /home/jz/vla/datasets/ur7e_xbox_tcp_delta_gripper
+  fps: 30
+  num_episodes: 10
+  episode_time_s: 30
+  reset_time_s: 10
+  reset_wait_for_key: true
+  single_task: Pick up the object
+  push_to_hub: false
+  streaming_encoding: true
+  encoder_threads: 2
+
+display_data: true
+play_sounds: false

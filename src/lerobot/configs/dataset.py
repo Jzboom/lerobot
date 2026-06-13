@@ -35,6 +35,8 @@ class DatasetRecordConfig:
     episode_time_s: int | float = 60
     # Number of seconds for resetting the environment after each episode.
     reset_time_s: int | float = 60
+    # If True, the reset phase runs until the right arrow key is pressed.
+    reset_wait_for_key: bool = False
     # Number of episodes to record.
     num_episodes: int = 50
     # Encode frames in the dataset into video

@@ -40,6 +40,15 @@ gripper_action_map = {
     "stay": GripperAction.STAY.value,
 }
 
+TCP_DELTA_ACTION_KEYS = (
+    "tcp_delta_x",
+    "tcp_delta_y",
+    "tcp_delta_z",
+    "tcp_delta_rx",
+    "tcp_delta_ry",
+    "tcp_delta_rz",
+)
+
 
 class GamepadTeleop(Teleoperator):
     """
@@ -53,11 +62,22 @@ class GamepadTeleop(Teleoperator):
         super().__init__(config)
         self.config = config
         self.robot_type = config.type
+        if self.config.output_mode not in {"delta", "tcp_delta"}:
+            raise ValueError(
+                f"Unsupported gamepad output_mode '{self.config.output_mode}'. "
+                "Expected one of: 'delta', 'tcp_delta'."
+            )
 
         self.gamepad = None
 
     @property
     def action_features(self) -> dict:
+        if self.config.output_mode == "tcp_delta":
+            action_keys = TCP_DELTA_ACTION_KEYS
+            if self.config.use_gripper:
+                action_keys = (*TCP_DELTA_ACTION_KEYS, "gripper")
+            return dict.fromkeys(action_keys, float)
+
         if self.config.use_gripper:
             return {
                 "dtype": "float32",
@@ -83,13 +103,16 @@ class GamepadTeleop(Teleoperator):
         else:
             from .gamepad_utils import GamepadController as Gamepad
 
-        self.gamepad = Gamepad()
+        self.gamepad = Gamepad(deadzone=self.config.deadzone)
         self.gamepad.start()
 
     @check_if_not_connected
     def get_action(self) -> RobotAction:
         # Update the controller to get fresh inputs
         self.gamepad.update()
+
+        if self.config.output_mode == "tcp_delta":
+            return self._get_tcp_delta_action()
 
         # Get movement deltas from the controller
         delta_x, delta_y, delta_z = self.gamepad.get_deltas()
@@ -110,6 +133,43 @@ class GamepadTeleop(Teleoperator):
             gripper_action = gripper_action_map[gripper_command]
             action_dict["gripper"] = gripper_action
 
+        return action_dict
+
+    def _get_tcp_delta_action(self) -> RobotAction:
+        if self.config.require_deadman and not self.gamepad.is_deadman_pressed():
+            action_dict = {key: 0.0 for key in TCP_DELTA_ACTION_KEYS}
+            if self.config.use_gripper:
+                gripper_command = self.gamepad.gripper_command()
+                action_dict["gripper"] = gripper_action_map[gripper_command]
+            return action_dict
+
+        x_input, y_input, z_input = self.gamepad.get_motion_inputs()
+        if self.gamepad.is_rotation_mode():
+            linear_delta = (0.0, 0.0, 0.0)
+            angular_delta = (
+                x_input * self.config.angular_delta_step_rad,
+                y_input * self.config.angular_delta_step_rad,
+                z_input * self.config.angular_delta_step_rad,
+            )
+        else:
+            linear_delta = (
+                x_input * self.config.linear_delta_step_m,
+                y_input * self.config.linear_delta_step_m,
+                z_input * self.config.linear_delta_step_m,
+            )
+            angular_delta = (0.0, 0.0, 0.0)
+
+        action_dict = {
+            "tcp_delta_x": float(linear_delta[0]),
+            "tcp_delta_y": float(linear_delta[1]),
+            "tcp_delta_z": float(linear_delta[2]),
+            "tcp_delta_rx": float(angular_delta[0]),
+            "tcp_delta_ry": float(angular_delta[1]),
+            "tcp_delta_rz": float(angular_delta[2]),
+        }
+        if self.config.use_gripper:
+            gripper_command = self.gamepad.gripper_command()
+            action_dict["gripper"] = gripper_action_map[gripper_command]
         return action_dict
 
     def get_teleop_events(self) -> dict[str, Any]:
@@ -170,6 +230,7 @@ class GamepadTeleop(Teleoperator):
         # No calibration needed for gamepad
         pass
 
+    @property
     def is_calibrated(self) -> bool:
         """Check if gamepad is calibrated."""
         # Gamepad doesn't require calibration

@@ -131,6 +131,7 @@ from lerobot.robots import (  # noqa: F401
     reachy2,
     rebot_b601_follower,
     so_follower,
+    ur_rtde,
     unitree_g1 as unitree_g1_robot,
 )
 from lerobot.teleoperators import (  # noqa: F401
@@ -139,6 +140,7 @@ from lerobot.teleoperators import (  # noqa: F401
     bi_openarm_leader,
     bi_rebot_102_leader,
     bi_so_leader,
+    gamepad,
     homunculus,
     koch_leader,
     make_teleoperator_from_config,
@@ -364,6 +366,20 @@ def record(
     )
 
     robot = make_robot_from_config(cfg.robot)
+    if robot.name == "ur_rtde":
+        robot_control_hz = getattr(cfg.robot, "control_hz")
+        if robot_control_hz != cfg.dataset.fps:
+            raise ValueError(
+                "For ur_rtde recording, robot.control_hz must match dataset.fps so TCP delta "
+                f"actions stay per-frame ({robot_control_hz} != {cfg.dataset.fps})."
+            )
+        if getattr(cfg.teleop, "type", None) == "gamepad" and getattr(cfg.teleop, "output_mode", None) == "delta":
+            cfg.teleop.output_mode = "tcp_delta"
+        if getattr(cfg.robot, "gripper_enabled", False) and not getattr(cfg.teleop, "use_gripper", False):
+            raise ValueError(
+                "robot.gripper_enabled=true requires teleop.use_gripper=true so recorded actions "
+                "include the gripper command."
+            )
     teleop = make_teleoperator_from_config(cfg.teleop) if cfg.teleop is not None else None
 
     # Fall back to identity pipelines when the caller doesn't supply processors.
@@ -442,6 +458,11 @@ def record(
             teleop.connect()
 
         listener, events = init_keyboard_listener()
+        if cfg.dataset.reset_wait_for_key and listener is None:
+            raise RuntimeError(
+                "dataset.reset_wait_for_key=true requires keyboard input. "
+                "Run with a local display/keyboard listener or set dataset.reset_wait_for_key=false."
+            )
 
         if not cfg.dataset.streaming_encoding:
             logging.info(
@@ -472,7 +493,10 @@ def record(
                 if not events["stop_recording"] and (
                     (recorded_episodes < cfg.dataset.num_episodes - 1) or events["rerecord_episode"]
                 ):
-                    log_say("Reset the environment", cfg.play_sounds)
+                    if cfg.dataset.reset_wait_for_key:
+                        log_say("Reset the environment, then press right arrow", cfg.play_sounds)
+                    else:
+                        log_say("Reset the environment", cfg.play_sounds)
 
                     record_loop(
                         robot=robot,
@@ -482,7 +506,9 @@ def record(
                         robot_action_processor=robot_action_processor,
                         robot_observation_processor=robot_observation_processor,
                         teleop=teleop,
-                        control_time_s=cfg.dataset.reset_time_s,
+                        control_time_s=float("inf")
+                        if cfg.dataset.reset_wait_for_key
+                        else cfg.dataset.reset_time_s,
                         single_task=cfg.dataset.single_task,
                         display_data=cfg.display_data,
                     )

@@ -65,6 +65,10 @@ class InputController:
         """Get the current movement deltas (dx, dy, dz) in meters."""
         return 0.0, 0.0, 0.0
 
+    def get_motion_inputs(self):
+        """Get normalized movement inputs using the same axis convention as get_deltas."""
+        return self.get_deltas()
+
     def update(self):
         """Update controller state - call this once per frame."""
         pass
@@ -92,6 +96,14 @@ class InputController:
     def should_intervene(self):
         """Return True if intervention flag was set."""
         return self.intervention_flag
+
+    def is_deadman_pressed(self):
+        """Return True when the active hold-to-move button is pressed."""
+        return self.should_intervene()
+
+    def is_rotation_mode(self):
+        """Return True when the controller should map sticks to TCP rotation."""
+        return False
 
     def gripper_command(self):
         """Return the current gripper command."""
@@ -217,6 +229,7 @@ class GamepadController(InputController):
         self.deadzone = deadzone
         self.joystick = None
         self.intervention_flag = False
+        self.rotation_mode = False
 
     def start(self):
         """Initialize pygame and the gamepad."""
@@ -239,6 +252,9 @@ class GamepadController(InputController):
         print("  Y/Triangle button: End episode with SUCCESS")
         print("  A/Cross button: End episode with FAILURE")
         print("  X/Square button: Rerecord episode")
+        print("  RB button: Hold-to-move deadman switch")
+        print("  LB button: Hold for TCP rotation mode")
+        print("  D-pad up/down: Open/close gripper")
 
     def stop(self):
         """Clean up pygame resources."""
@@ -269,9 +285,14 @@ class GamepadController(InputController):
                 elif event.button == 7:
                     self.open_gripper_command = True
 
+            elif event.type == pygame.JOYHATMOTION:
+                _hat_x, hat_y = event.value
+                self.open_gripper_command = hat_y > 0
+                self.close_gripper_command = hat_y < 0
+
             # Reset episode status on button release
             elif event.type == pygame.JOYBUTTONUP:
-                if event.button in [0, 2, 3]:
+                if event.button in [0, 1, 3]:
                     self.episode_end_status = None
 
                 elif event.button == 6:
@@ -280,38 +301,54 @@ class GamepadController(InputController):
                 elif event.button == 7:
                     self.open_gripper_command = False
 
-            # Check for RB button (typically button 5) for intervention flag
-            if self.joystick.get_button(5):
-                self.intervention_flag = True
-            else:
-                self.intervention_flag = False
+        if self.joystick is not None:
+            self.intervention_flag = self._get_button(5)
+            self.rotation_mode = self._get_button(4)
+
+    def _get_axis(self, index: int) -> float:
+        if self.joystick is None or index >= self.joystick.get_numaxes():
+            return 0.0
+        return self.joystick.get_axis(index)
+
+    def _get_button(self, index: int) -> bool:
+        if self.joystick is None or index >= self.joystick.get_numbuttons():
+            return False
+        return bool(self.joystick.get_button(index))
+
+    def get_motion_inputs(self):
+        """Get normalized x/y/z inputs using the Xbox stick convention."""
+        try:
+            left_x = self._get_axis(0)
+            left_y = self._get_axis(1)
+            right_y_axis = 4 if self.joystick is not None and self.joystick.get_numaxes() > 4 else 3
+            right_y = self._get_axis(right_y_axis)
+
+            left_x = 0 if abs(left_x) < self.deadzone else left_x
+            left_y = 0 if abs(left_y) < self.deadzone else left_y
+            right_y = 0 if abs(right_y) < self.deadzone else right_y
+
+            return -left_y, -left_x, -right_y
+
+        except pygame.error:
+            logging.error("Error reading gamepad. Is it still connected?")
+            return 0.0, 0.0, 0.0
 
     def get_deltas(self):
         """Get the current movement deltas from gamepad state."""
         try:
-            # Read joystick axes
-            # Left stick X and Y (typically axes 0 and 1)
-            y_input = self.joystick.get_axis(0)  # Up/Down (often inverted)
-            x_input = self.joystick.get_axis(1)  # Left/Right
-
-            # Right stick Y (typically axis 3 or 4)
-            z_input = self.joystick.get_axis(3)  # Up/Down for Z
-
-            # Apply deadzone to avoid drift
-            x_input = 0 if abs(x_input) < self.deadzone else x_input
-            y_input = 0 if abs(y_input) < self.deadzone else y_input
-            z_input = 0 if abs(z_input) < self.deadzone else z_input
-
-            # Calculate deltas (note: may need to invert axes depending on controller)
-            delta_x = -x_input * self.x_step_size  # Forward/backward
-            delta_y = -y_input * self.y_step_size  # Left/right
-            delta_z = -z_input * self.z_step_size  # Up/down
+            x_input, y_input, z_input = self.get_motion_inputs()
+            delta_x = x_input * self.x_step_size  # Forward/backward
+            delta_y = y_input * self.y_step_size  # Left/right
+            delta_z = z_input * self.z_step_size  # Up/down
 
             return delta_x, delta_y, delta_z
 
         except pygame.error:
             logging.error("Error reading gamepad. Is it still connected?")
             return 0.0, 0.0, 0.0
+
+    def is_rotation_mode(self):
+        return self.rotation_mode
 
 
 class GamepadControllerHID(InputController):
@@ -346,6 +383,7 @@ class GamepadControllerHID(InputController):
 
         # Button states
         self.buttons = {}
+        self.rotation_mode = False
 
     def find_device(self):
         """Look for the gamepad device by vendor and product ID."""
@@ -383,6 +421,7 @@ class GamepadControllerHID(InputController):
             logging.info("  Button 1/B/Circle: Exit")
             logging.info("  Button 2/A/Cross: End episode with SUCCESS")
             logging.info("  Button 3/X/Square: End episode with FAILURE")
+            logging.info("  D-pad up/down or trigger buttons: Open/close gripper")
 
         except OSError as e:
             logging.error(f"Error opening gamepad: {e}")
@@ -431,6 +470,7 @@ class GamepadControllerHID(InputController):
 
                 # Check if RB is pressed then the intervention flag should be set
                 self.intervention_flag = data[6] in [2, 6, 10, 14]
+                self.rotation_mode = data[6] in [1, 5, 9, 13]
 
                 # Check if RT is pressed
                 self.open_gripper_command = data[6] in [8, 10, 12]
@@ -455,9 +495,16 @@ class GamepadControllerHID(InputController):
 
     def get_deltas(self):
         """Get the current movement deltas from gamepad state."""
-        # Calculate deltas - invert as needed based on controller orientation
-        delta_x = -self.left_x * self.x_step_size  # Forward/backward
-        delta_y = -self.left_y * self.y_step_size  # Left/right
-        delta_z = -self.right_y * self.z_step_size  # Up/down
+        x_input, y_input, z_input = self.get_motion_inputs()
+        delta_x = x_input * self.x_step_size  # Forward/backward
+        delta_y = y_input * self.y_step_size  # Left/right
+        delta_z = z_input * self.z_step_size  # Up/down
 
         return delta_x, delta_y, delta_z
+
+    def get_motion_inputs(self):
+        """Get normalized x/y/z inputs using the HID stick convention."""
+        return -self.left_x, -self.left_y, -self.right_y
+
+    def is_rotation_mode(self):
+        return self.rotation_mode

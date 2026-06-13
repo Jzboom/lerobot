@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,17 +14,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
+from .config_ur_rtde import URRTDERobotConfig
+from .ur_rtde import (
+    GRIPPER_ACTION_KEY,
+    GRIPPER_OBS_KEYS,
+    JOINT_OBS_KEYS,
+    TCP_DELTA_ACTION_KEYS,
+    TCP_POSE_OBS_KEYS,
+    URRTDERobot,
+)
 
-from ..config import TeleoperatorConfig
-
-
-@TeleoperatorConfig.register_subclass("gamepad")
-@dataclass
-class GamepadTeleopConfig(TeleoperatorConfig):
-    use_gripper: bool = True
-    output_mode: str = "delta"
-    require_deadman: bool = True
-    linear_delta_step_m: float = 0.001
-    angular_delta_step_rad: float = 0.01
-    deadzone: float = 0.12
+__all__ = [
+    "GRIPPER_ACTION_KEY",
+    "GRIPPER_OBS_KEYS",
+    "JOINT_OBS_KEYS",
+    "TCP_DELTA_ACTION_KEYS",
+    "TCP_POSE_OBS_KEYS",
+    "URRTDERobot",
+    "URRTDERobotConfig",
+]

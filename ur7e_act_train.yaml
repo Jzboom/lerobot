@@ -1,0 +1,24 @@
+dataset:
+  repo_id: local/ur7e_xbox_tcp_delta_gripper
+  root: /home/jz/vla/datasets/ur7e_xbox_tcp_delta_gripper
+  video_backend: pyav
+  use_imagenet_stats: true
+
+policy:
+  type: act
+  device: cuda
+  push_to_hub: false
+  chunk_size: 30
+  n_action_steps: 30
+  # Set to null for a first offline smoke run. Remove this line to use ImageNet pretrained ResNet18.
+  pretrained_backbone_weights: null
+
+output_dir: /home/jz/vla/outputs/train/ur7e_act_debug
+batch_size: 1
+steps: 2000
+eval_freq: -1
+log_freq: 20
+save_freq: 500
+num_workers: 0
+wandb:
+  enable: false
